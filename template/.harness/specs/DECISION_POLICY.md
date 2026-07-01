@@ -27,7 +27,7 @@ risk_reduction: 2
 
 Estimate every component on the **Fibonacci set {1, 2, 3, 5, 8, 13}** — never a
 number outside it. Fibonacci forces meaningful gaps and stops the score from being
-false-precise noise. Duration uses the same set (rough size, refined by `plan`'s
+false-precise noise. Duration uses the same set (rough size, refined by `planner`'s
 gap analysis).
 
 | Score | business_value | time_criticality | risk_reduction | job_duration |

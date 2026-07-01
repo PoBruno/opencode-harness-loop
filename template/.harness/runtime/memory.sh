@@ -30,14 +30,21 @@ memory_log() {
   fi
 }
 
-# memory_log_incident <loop> <detail> — an aborted/failed cycle. Recorded in the
-# episodic log and surfaced as a one-line learning ("what broke").
+# memory_log_incident <loop> <detail> — a failed/aborted cycle. Recorded ONLY in
+# the runtime-owned episodic history (never learnings.md — that is agent-owned, and
+# a runtime write to it would leak into the next cycle's contract check and cause a
+# false out-of-scope violation). Review consolidates incidents into learnings.md.
 memory_log_incident() {
   local loop="$1" detail="${2:-incident}"
-  memory_log "$loop" "incident"
-  mkdir -p "$(dirname "$LEARNINGS_FILE")"
-  [[ -f "$LEARNINGS_FILE" ]] || printf '# Learnings\n' >"$LEARNINGS_FILE"
-  printf -- '- _(incident %s)_ %s: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$loop" "$detail" >>"$LEARNINGS_FILE"
+  mkdir -p "$HISTORY_DIR"
+  local file="$HISTORY_DIR/$(date +%Y-%m-%d).jsonl"
+  local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if command -v jq >/dev/null 2>&1; then
+    jq -cn --arg ts "$ts" --arg loop "$loop" --arg detail "$detail" \
+      '{ts:$ts, loop:$loop, result:"incident", detail:$detail}' >>"$file"
+  else
+    printf '{"ts":"%s","loop":"%s","result":"incident","detail":"%s"}\n' "$ts" "$loop" "$detail" >>"$file"
+  fi
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

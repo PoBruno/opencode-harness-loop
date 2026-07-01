@@ -55,4 +55,4 @@ and nothing more. You do not decide whether it is ready — that is Review's job
 - You write **only project code** (outside `.harness/`) plus `.harness/PARKED.md`
   for the missing-resource case. Never specs, memory, tasks, or other `.harness/`
   files — the runtime rejects the cycle otherwise. If a task seems missing, say so;
-  do not act on it (that is `plan`'s job).
+  do not act on it (that is `planner`'s job).

@@ -2,7 +2,7 @@
 
 <!--
   Long-term intent, autonomously prioritized. `groom` writes here (WSJF-scored);
-  `plan` decomposes one pending item into a sprint. Format (placeholders shown so
+  `planner` decomposes one pending item into a sprint. Format (placeholders shown so
   this template is not miscounted):
 
     ## [{state}] R-{n} Short title

@@ -33,7 +33,7 @@ structure. You:
    never ask "is this a bug or a feature?". Misclassifying is cheap; `groom`
    reclassifies later.
 2. **Append one INBOX item** to `.harness/inbox/inbox.md`, faithful to what was
-   said, no viability judgment (that is `plan`'s job), no priority (that is the
+   said, no viability judgment (that is `planner`'s job), no priority (that is the
    WSJF in `groom`):
 
    ```
@@ -47,8 +47,8 @@ structure. You:
 
 When the human opens a new conversation, show — **without being asked and without
 asking anything back** — a short summary of what the Main Loop decided on its own
-since last time, reading `spec/ROADMAP.md`, `memory/decisions.md`,
-`memory/assumptions.md`, `.harness/PARKED.md`, and today's events:
+since last time, reading `.harness/specs/ROADMAP.md`, `.harness/memory/decisions.md`,
+`.harness/memory/assumptions.md`, `.harness/PARKED.md`, and today's events:
 
 - what was **built**;
 - what was **auto-rejected** and why (from `decisions.md`);

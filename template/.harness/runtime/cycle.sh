@@ -37,10 +37,12 @@ FAILURES=0
 STERILE=0
 IDLE_TICKS=0
 LAST_HEALTH=""
+LAST_FAIL_LOG=""
 
 log() { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*" >&2; }
 die() {
   log "FATAL: $*"
+  git_unlock 2>/dev/null || true   # explicit release (do not rely on OS fd-close)
   state_set health red message "$*"
   _emit_health_change red
   generate_dashboard
@@ -51,10 +53,13 @@ fingerprint() {
   {
     git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null || echo "no-head"
     git -C "$PROJECT_DIR" diff HEAD -- . \
-      ':(exclude).harness/state' ':(exclude).harness/events' ':(exclude).harness/logs' 2>/dev/null || true
+      ':(exclude).harness/state' ':(exclude).harness/events' ':(exclude).harness/logs' \
+      ':(exclude).harness/memory/history' ':(exclude).harness/presentation/html' 2>/dev/null || true
     git -C "$PROJECT_DIR" ls-files --others --exclude-standard -z 2>/dev/null \
       | while IFS= read -r -d '' f; do
-          case "$f" in .harness/state/*|.harness/events/*|.harness/logs/*) continue;; esac
+          case "$f" in
+            .harness/state/*|.harness/events/*|.harness/logs/*|.harness/memory/history/*|.harness/presentation/html/*) continue ;;
+          esac
           printf '%s\0' "$f"; md5sum "$PROJECT_DIR/$f" 2>/dev/null || true
         done
   } | md5sum | awk '{print $1}'
@@ -75,8 +80,41 @@ classify_result() {
   (( rc == 0 )) && echo pass || echo fail
 }
 
+# Distinguish a broken environment/gate (NOT a decision — re-planning a correct
+# task cannot fix a missing dependency or a malformed gate command) from a real
+# implementation failure. Scans a log for infrastructure signatures.
+_looks_like_infra() {
+  local logfile="${1:-}"
+  [[ -f "$logfile" ]] || return 1
+  grep -qiE 'command not found|: not found|no such file or directory|modulenotfounderror|importerror: no module|not recognized as|executable file not found|cannot execute|permission denied|no such module|unable to locate|is not installed' \
+    "$logfile" 2>/dev/null
+}
+
 generate_dashboard() {
   bash "$HARNESS_DIR/presentation/html/dashboard.sh" >/dev/null 2>&1 || true
+}
+
+# Acquire the git mutex for a cycle. The Main Loop holds it for the whole cycle
+# (checkpoint -> snapshot -> agent -> validate -> commit/rollback), because the
+# snapshot-based contract check and rollback require exclusive access from
+# snapshot to commit. It therefore NEVER proceeds unlocked (that would reopen the
+# very race the mutex prevents). Instead it waits — the only holder is the
+# watcher, whose hold is bounded by INTAKE_TIMEOUT — retrying with a short per-
+# attempt wait and publishing runtime.lock_contended (visible in the Decision Log)
+# so the wait is observable. Only if the watcher exceeds even its own timeout (a
+# genuine deadlock, not normal contention) does it halt honestly via die().
+_acquire_git_lock() {
+  local phase="$1" i max
+  max="${MAIN_LOCK_RETRIES:-24}"   # * MAIN_LOCK_WAIT(15s) ~= 6min, covers the watcher's INTAKE_TIMEOUT bound
+  for (( i = 1; i <= max; i++ )); do
+    GIT_LOCK_WAIT="${MAIN_LOCK_WAIT:-15}" git_lock && return 0
+    if (( i == 1 || i % 4 == 0 )); then
+      events_emit runtime.lock_contended --loop "$phase" --data "$(jq -cn --argjson s "$(( i * ${MAIN_LOCK_WAIT:-15} ))" '{waited_s:$s}' 2>/dev/null || echo '{}')"
+      log "WARN: git mutex held by the intake watcher ($(( i * ${MAIN_LOCK_WAIT:-15} ))s waited)"
+    fi
+  done
+  events_emit runtime.lock_contended --loop "$phase" --result deadlock
+  die "git mutex deadlock: the intake watcher held the lock beyond its own timeout (~$(( max * ${MAIN_LOCK_WAIT:-15} ))s). A desk run is likely stuck — check .harness/logs/intake-*.log, then re-run."
 }
 
 _emit_health_change() {
@@ -112,9 +150,17 @@ _review_and_distill() {
     events_emit review.passed --loop review --task "$task"
     _distill "$task"
   else
-    [[ "$rres" == pass ]] || true
-    validate_contract review || rollback_cycle
-    memory_log_incident review "review failed for $task"
+    # Review verdict is retry. Its memory consolidation (learnings about what was
+    # wrong) is valuable and IN SCOPE, so COMMIT it — leaving it uncommitted would
+    # leak into the next build's contract check as a false out-of-scope write.
+    # Only roll back if review itself wrote out of scope.
+    if validate_contract review; then
+      commit_cycle review "$task"
+    else
+      rollback_cycle review
+    fi
+    LAST_FAIL_LOG="$rlog"
+    memory_log_incident review "review verdict: retry for $task"
     state_set last_review fail
     events_emit review.failed --loop review --task "$task"
     (( FAILURES++ ))
@@ -139,35 +185,48 @@ _distill() {
     (( after_skills > before_skills )) && events_emit distill.skill_created --loop distill --task "$task"
     (( after_mcp > before_mcp )) && events_emit distill.mcp_created --loop distill --task "$task"
   else
-    rollback_cycle
+    rollback_cycle distill
     memory_log_incident distill "out-of-scope write"
   fi
 }
 
 # ---- escalation: the doctrine's answer to a stall (never halt for a decision) --
 # A stuck phase is routed to a decision instead of killing the runtime:
-#   build  -> mark its task [!] so `plan` re-decides it (smaller slice / reinterpret / reject)
-#   plan   -> drop the escalated task it cannot resolve, or auto-reject an un-plannable roadmap item
-#   groom  -> drop a malformed inbox dump it keeps looping on
-# The failed attempt is rolled back, the state change committed, breakers reset,
-# and the loop lives on. die() is reserved for genuine infrastructure failure.
+#   build   -> mark its task [!] so `planner` re-decides it (smaller slice / reinterpret / reject)
+#   planner -> drop the escalated task it cannot resolve, or auto-reject an un-plannable roadmap item
+#   groom   -> drop a malformed inbox dump it keeps looping on
+# Note on attribution: `review` runs INLINE inside a build cycle, so a run of
+# review rejections increments the same global FAILURES and escalates with
+# $loop == "build" (the outer run_cycle phase). A `decision.escalated --loop build`
+# can therefore mean "review kept rejecting this build" — routing the task back to
+# the planner is still the right response (the planner re-slices the bad task).
+#
+# EXCEPTION: a broken gate/environment is NOT a decision. Re-planning a correct
+# task cannot fix a missing dependency or a malformed gate command, and would just
+# loop auto-rejecting correct tasks. So an infra-flavored failure halts honestly
+# (die) for a human to fix, instead of escalating to the planner.
 escalate() {
   local loop="$1" task
   task="$(current_task)"
-  rollback_cycle
+
+  if (( FAILURES >= MAX_FAILURES )) && _looks_like_infra "$LAST_FAIL_LOG"; then
+    die "infrastructure/gate failure (not a task decision) after $FAILURES attempts — the gates or environment look broken (missing dependency or a malformed command in .harness/gates.local.sh). Fix it and re-run. Log: $LAST_FAIL_LOG"
+  fi
+
+  rollback_cycle "$loop"
   memory_log_incident "$loop" "escalated after repeated failure/sterility (routed to a decision, not halted)"
   case "$loop" in
     build)
       mark_first_task_escalated
-      events_emit decision.escalated --loop build --task "$task" --data "$(jq -cn --arg t "$task" '{task:$t,to:"plan"}' 2>/dev/null || echo '{}')"
+      events_emit decision.escalated --loop build --task "$task" --data "$(jq -cn --arg t "$task" '{task:$t,to:"planner"}' 2>/dev/null || echo '{}')"
       ;;
-    plan)
+    planner)
       if (( $(count_sprint_escalated) > 0 )); then
         drop_first_escalated_task
       else
         reject_first_roadmap_pending
       fi
-      events_emit decision.auto_rejected --loop plan
+      events_emit decision.auto_rejected --loop planner
       ;;
     groom)
       drop_first_inbox_item
@@ -217,6 +276,13 @@ run_cycle() {
   log "cycle $CYCLE — $loop ${task:+($task)}"
 
   local fpb fpa start logfile rc dur_ms result changed
+  _acquire_git_lock "$loop"
+  # Checkpoint any pending desk write (interactive `opencode --agent desk` OR the
+  # watcher) BEFORE snapshotting, so this cycle's rollback can never silently erase
+  # an uncommitted intake item. SCOPED to the inbox and PARKED only: any other dirty
+  # file is deliberately left out so it surfaces as a normal contract violation next,
+  # instead of being silently swallowed under a "pending intake" checkpoint.
+  git_commit "harness: checkpoint pending intake" .harness/inbox .harness/PARKED.md
   fpb="$(fingerprint)"
   git_snapshot
   context_build "$loop" >/dev/null
@@ -247,12 +313,17 @@ run_cycle() {
       [[ "$loop" == build && "$result" == pass ]] && _review_and_distill "$task"
       ;;
     violation)
-      rollback_cycle
+      rollback_cycle "$loop"
+      LAST_FAIL_LOG="$logfile"
       memory_log_incident "$loop" "out-of-scope write"
       events_emit "${loop}.failed" --loop "$loop" --task "$task" --result fail --duration_ms "$dur_ms"
       (( FAILURES++ ))
       ;;
     *)
+      # A failed attempt: discard its uncommitted partial work so nothing leaks
+      # into the next cycle's contract check (every cycle ends committed or clean).
+      rollback_cycle "$loop"
+      LAST_FAIL_LOG="$logfile"
       memory_log_incident "$loop" "$result"
       events_emit "${loop}.failed" --loop "$loop" --task "$task" --result fail --duration_ms "$dur_ms"
       (( FAILURES++ ))
@@ -270,6 +341,7 @@ run_cycle() {
 
   _update_health
   generate_dashboard
+  git_unlock
   return 0
 }
 
@@ -304,7 +376,26 @@ main() {
       *)  (( i++ )); sleep "$(interval)" ;;
     esac
   done
-  die "reached MAX_ITERATIONS=$MAX_ITERATIONS"
+
+  # Reached the iteration ceiling — a clean, expected stop (this is exactly how
+  # --once ends after its single cycle), NOT an error. Health is green if the
+  # backlog is empty, yellow if work remains (just run again to continue).
+  local remaining h="green" msg="reached the iteration ceiling ($MAX_ITERATIONS cycles)"
+  remaining=$(( $(count_inbox_pending) + $(count_sprint_open) + $(count_sprint_escalated) + $(count_roadmap_pending) ))
+  if (( remaining > 0 )); then
+    h="yellow"; msg="$msg — $remaining work item(s) still pending; run again to continue"
+  fi
+  state_set active_loop idle health "$h" message "$msg"
+  _emit_health_change "$h"
+  events_emit cycle.finished
+  generate_dashboard
+  log "$msg"
+  exit 0
 }
 
-main "$@"
+# Only run the loop when executed directly; sourcing exposes the functions for
+# testing (e.g. _acquire_git_lock, classify_result, _looks_like_infra) without
+# side effects.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi

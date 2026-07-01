@@ -168,7 +168,7 @@ things:
    reclassification is not a decision that needs you.
 
 2. **Marks initial confidence and apparent scope**, without judging viability —
-   viability is `plan`'s job, not `desk`'s. `desk` only records what you said, as
+   viability is `planner`'s job, not `desk`'s. `desk` only records what you said, as
    faithfully as possible, with a type tag and a *suggested* priority (not decided —
    the final priority comes from the WSJF in `groom`, Part V.1).
 
@@ -226,7 +226,7 @@ hunches:
   (high) vs a long-term `vision` (low)?
 - **Risk reduction** — does the item unlock knowledge or infrastructure other items
   will need? (E.g. a data model three future features depend on.)
-- **Job duration** — estimated by `plan` via gap analysis against the real code (the
+- **Job duration** — estimated by `planner` via gap analysis against the real code (the
   same technique as previous versions), not a hunch.
 
 The result is a number. Higher WSJF first. This completely replaces asking "is this
@@ -238,20 +238,20 @@ enters, a dependency resolves).
 
 ### V.2 — Viability: gap analysis + vertical-slice decomposition, never a block
 
-`plan` (same responsibility as before: read the real code via subagents, check
+`planner` (same responsibility as before: read the real code via subagents, check
 against `ARCHITECTURE.md`) changes what it does when it finds an item that *looks*
 infeasible as requested. Previously it "backed off": marked it blocked and wrote
 why, waiting for you. Now it has a sequence of attempts before considering anything
 un-doable:
 
 1. **Minimum vertical slice** (*vertical slice decomposition*, a classic agile
-   technique): instead of asking "this is too big, do you still want it?", `plan`
+   technique): instead of asking "this is too big, do you still want it?", `planner`
    decomposes the item into the smallest slice that delivers observable value on its
    own, and queues only that slice as a task. The rest returns to the ROADMAP as
    child items, each re-scored by WSJF — naturally, what remains can rise or fall in
    priority on its own.
 2. **Reinterpretation under the invariants** — if the request conflicts with an
-   architecture invariant (see V.3), `plan` does not ask "want me to ignore it?". It
+   architecture invariant (see V.3), `planner` does not ask "want me to ignore it?". It
    applies the precedence hierarchy: the invariant always wins. It then tries to
    reformulate the request in a way that preserves the original intent without
    violating the invariant (e.g. "export CSV straight from the DB" conflicts with
@@ -260,7 +260,7 @@ un-doable:
    intent and respects the invariant).
 3. **Documented rejection** — only if the two attempts above fail (the item
    genuinely has no viable slice and no intent-preserving reinterpretation) does
-   `plan` mark the item `status: auto-rejected` in the ROADMAP, write the full
+   `planner` mark the item `status: auto-rejected` in the ROADMAP, write the full
    reasoning to `memory/decisions.md`, and — importantly — **stop nothing**. The
    cycle moves to the next item. You find out in the next `desk` bulletin, and if
    you disagree, you reopen it as a new intake item with the rejection context
@@ -376,12 +376,12 @@ not exist yet, and even that does not stall the rest of the system.
 |---|---|---|---|---|
 | `desk` | half | no | type classification, bulletin | `inbox.md` |
 | `groom` | main | no | WSJF, incorporation into ROADMAP | `ROADMAP.md`, `memory/intent.jsonl` |
-| `plan` | main | reads | viability, decomposition, reinterpretation, rejection | `SPRINT.md`, `tasks/*.md`, `memory/decisions.md`, `memory/assumptions.md` |
+| `planner` | main | reads | viability, decomposition, reinterpretation, rejection | `SPRINT.md`, `tasks/*.md`, `memory/decisions.md`, `memory/assumptions.md` |
 | `build` | main | edits | implementation within the task contract | code |
 | `review` | main | diff only | done/retry, semantic consolidation, gate judgment | `memory/decisions.md`, `learnings.md`, `patterns.md`, `understanding.json` |
 | `distill` | main | no | becomes a skill or an MCP | `skills/*`, `mcp/*` (quarantine) |
 
-Boundary kept: only `plan` and `build` touch code. Change from previous versions:
+Boundary kept: only `planner` and `build` touch code. Change from previous versions:
 **no agent may write a decision request back to `INBOX.md` or create an item in a
 blocked file for anything other than "a physical external resource is missing"**.
 This restriction is enforced by the contract layer — each agent's frontmatter
@@ -413,8 +413,8 @@ decide_phase():
 sterility is a decision point, not a reason to halt** — killing the runtime and
 waiting for a human to notice a red dashboard would be a disguised block, which
 Principle 9 forbids. So the breakers **escalate instead of dying**: a build that
-fails/stalls repeatedly has its task marked `[!]` and routed back to `plan` to
-re-decide (smaller slice / reinterpret / auto-reject); a `plan` that cannot
+fails/stalls repeatedly has its task marked `[!]` and routed back to `planner` to
+re-decide (smaller slice / reinterpret / auto-reject); a `planner` that cannot
 decompose an item auto-rejects it; a `groom` looping on a malformed dump drops it.
 The failed attempt is rolled back, the escalation committed, the breaker reset, and
 the loop lives on. `die()` (honest termination) is reserved for genuine
@@ -433,6 +433,30 @@ New domains relative to the previous version:
 |---|---|
 | decision | `decision.made`, `decision.assumption_logged`, `decision.auto_rejected`, `decision.reinterpreted`, `decision.escalated` |
 | task | `task.parked`, `task.unparked`, `task.decomposed` |
+| runtime | `runtime.health.{green,yellow,red}`, `runtime.lock_contended` |
+
+> **Git mutex + scope-aware rollback.** The Half-Loop watcher and the Main Loop
+> share a git mutex (flock) so their snapshot→commit/rollback sections never
+> interleave. The Main Loop holds it for the whole cycle (the snapshot-based
+> contract check and rollback need exclusive access from snapshot to commit) and
+> **never proceeds unlocked** — it waits for the watcher (whose hold is bounded by
+> `INTAKE_TIMEOUT`), publishing `runtime.lock_contended` so the wait is visible, and
+> only halts (`die`) if the watcher exceeds even its own timeout (a genuine
+> deadlock, not normal contention). The watcher yields cleanly on contention (skips
+> and retries; the message stays safe). This fully serializes the *watcher* path.
+> The only writer left outside the mutex is the **interactive** `opencode --agent
+> desk` (a human running a message by hand), which writes solely under the inbox
+> (`INTERACTIVE_SCOPE_RE`). That path is now handled directly: the
+> checkpoint-before-snapshot commits any pre-cycle interactive edit, and for any
+> cycle whose agent does **not** own the inbox the rollback is **scope-aware** — it
+> reverts the failed agent's own writes (in-scope work *and* out-of-scope
+> violations) with a path-scoped `git checkout`, while a concurrent inbox edit is
+> neither attributed to that agent by the contract check nor removed by the
+> rollback. A full `git reset --hard` is used only as a fallback when an agent
+> unexpectedly moves `HEAD` (agents do not commit; the runtime commits only on
+> success). The lone residual is an interactive edit made *during* a failing `desk`
+> or `groom` cycle — the two agents that legitimately own the inbox — which is a far
+> narrower window than a hard reset on every failed cycle.
 
 `decide.sh` publishes `decision.*` every time any Part V mechanism fires — this is
 what feeds the TUI's Decision Log (Part XII), the transparency piece that
@@ -453,7 +477,7 @@ semantic — specifically the low-confidence decisions, isolated for quick audit
 |---|---|---|---|
 | Working | `state/working_context.json` | `context.sh` | 1 cycle |
 | Episodic | `memory/intent.jsonl`, `events/*.jsonl`, `memory/history/*` | agents / `events.sh` / `archive.sh` | permanent, append-only |
-| Semantic | `decisions.md`, `assumptions.md`, `learnings.md`, `patterns.md` | `plan`/`review` | permanent, editable, configurable retention |
+| Semantic | `decisions.md`, `assumptions.md`, `learnings.md`, `patterns.md` | `planner`/`review` | permanent, editable, configurable retention |
 | Procedural | `AGENTS.md`, `skills/*`, `mcp/*` | human + `distill` | permanent, versioned |
 
 ---
@@ -561,14 +585,14 @@ reaction.
 | File | Owner | Editable by | Layer |
 |---|---|---|---|
 | `PRODUCT.md` | human | human + `groom` | spec |
-| `ARCHITECTURE.md` (with invariants) | human + `plan` | human + `plan` + `review` | spec |
+| `ARCHITECTURE.md` (with invariants) | human + `planner` | human + `planner` + `review` | spec |
 | `DECISION_POLICY.md` | human | human (rare, weight review) | spec |
 | `ROADMAP.md` | `groom` | yes | spec |
-| `SPRINT.md` | `plan` | regenerable | spec |
+| `SPRINT.md` | `planner` | regenerable | spec |
 | `inbox.md` | `desk` | `desk` (append), `groom` (consumes) | signal |
-| `PARKED.md` | `plan`/`build` | only reason `missing_external_resource` | signal, restricted |
-| `memory/decisions.md` | `plan`/`review` | append/supersede | semantic |
-| `memory/assumptions.md` | `plan` | append | semantic |
+| `PARKED.md` | `planner`/`build` | only reason `missing_external_resource` | signal, restricted |
+| `memory/decisions.md` | `planner`/`review` | append/supersede | semantic |
+| `memory/assumptions.md` | `planner` | append | semantic |
 | `state/*.json` | scripts | **script only** | working/runtime |
 | `events/*.jsonl` | `events.sh` | **script only** | episodic (bus) |
 | `skills/*`, `mcp/*` | `distill` | proposed, human-approved merge when you want to review | procedural |
@@ -597,7 +621,7 @@ time here.
 promote-on-green.
 
 **4 — Ralph agents** with the new discipline of never writing a decision request
-back — specifically testing that `plan` decomposes/reinterprets/rejects instead of
+back — specifically testing that `planner` decomposes/reinterprets/rejects instead of
 blocking is the most important acceptance test of this stage.
 
 **5 — Half Loop.** `inbox.md` with no required structure, `desk` with only capture

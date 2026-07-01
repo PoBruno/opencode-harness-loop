@@ -7,7 +7,9 @@
 
     ## [{state}] R-{n} Short title
     type: {feature|bug|adjustment|modeling|vision} · wsjf: {number} · from: I-{n}
-    outcome: the observable result to achieve
+    outcome: the observable result to achieve — a capability a user can see or run,
+             never "a document describing it" (modeling/vision are direction toward
+             a runnable slice, not a request to specify)
 
   state = pending | planned | done | auto-rejected
   A real card uses a literal state like `pending`. `auto-rejected` items carry

@@ -44,9 +44,13 @@ gap analysis).
 - A `bug` that breaks something already in production scores `time_criticality: 13`
   (that is the "production bugs jump the queue" rule, applied through the rubric,
   not a magic multiplier).
-- A `vision` item starts low on `time_criticality` (1–2): it is long-term.
+- A `vision` item starts low on `time_criticality` (1–2): it is long-term. Low
+  priority means it waits its turn — **not** that it becomes a document. Like every
+  item, it must eventually decompose into a runnable slice; it is just built later.
 - Data/domain `modeling` that several features depend on scores high on
-  `risk_reduction` (8–13): it unblocks others.
+  `risk_reduction` (8–13): it unblocks others. Score it via the feature it unblocks
+  and slice toward that running feature — a model is designed to be *built against*,
+  not filed as a spec.
 - An `adjustment` to an existing, working feature rarely exceeds `business_value: 3`
   unless it is on a PRODUCT.md priority module.
 - When two items tie on WSJF, the precedence chain in AGENTS.md breaks it (smaller

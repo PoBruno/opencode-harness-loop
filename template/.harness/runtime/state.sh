@@ -181,7 +181,7 @@ validate_contract() {
       echo "contract violation: $loop generated/edited an MCP not in 'status: quarantine' (agents never self-approve network tools)" >&2
       bad=1
     fi
-  done < <(git_changed_since_snapshot)
+  done < <(git_changed_since_snapshot "$loop")
   return $bad
 }
 
@@ -195,7 +195,7 @@ commit_cycle() {
   shift 2 2>/dev/null || true
   git_commit "harness($loop): cycle $(state_get cycle)${task:+ $task}" "$@"
 }
-rollback_cycle() { git_rollback; }
+rollback_cycle() { git_rollback "${1:-}"; }
 
 # ---- runtime-owned sprint mutations (agents cannot flip these checkboxes) ---
 _flip_first_open() { # <new-marker, e.g. x | p | !>
@@ -268,7 +268,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     validate_parked) validate_parked_reasons && echo "parked: ok" || { echo "parked: bad reason" >&2; exit 1; } ;;
     validate_mcp) validate_mcp_quarantine && echo "mcp: ok" || { echo "mcp: not quarantined" >&2; exit 1; } ;;
     commit) commit_cycle "$@" ;;
-    rollback) rollback_cycle ;;
+    rollback) rollback_cycle "$@" ;;
     mark_done) mark_first_task_done ;;
     mark_parked) mark_first_task_parked ;;
     mark_escalated) mark_first_task_escalated ;;

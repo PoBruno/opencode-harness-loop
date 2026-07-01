@@ -435,8 +435,8 @@ New domains relative to the previous version:
 | task | `task.parked`, `task.unparked`, `task.decomposed` |
 | runtime | `runtime.health.{green,yellow,red}`, `runtime.lock_contended` |
 
-> **Git mutex — behaviour and limitation.** The Half-Loop watcher and the Main
-> Loop share a git mutex (flock) so their snapshot→commit/rollback sections never
+> **Git mutex + scope-aware rollback.** The Half-Loop watcher and the Main Loop
+> share a git mutex (flock) so their snapshot→commit/rollback sections never
 > interleave. The Main Loop holds it for the whole cycle (the snapshot-based
 > contract check and rollback need exclusive access from snapshot to commit) and
 > **never proceeds unlocked** — it waits for the watcher (whose hold is bounded by
@@ -444,11 +444,19 @@ New domains relative to the previous version:
 > only halts (`die`) if the watcher exceeds even its own timeout (a genuine
 > deadlock, not normal contention). The watcher yields cleanly on contention (skips
 > and retries; the message stays safe). This fully serializes the *watcher* path.
-> The one remaining window is the **interactive** `opencode --agent desk`, which
-> runs outside the mutex: the checkpoint-before-snapshot protects any pre-cycle
-> interactive edit, but an interactive edit made *during* a failing cycle can still
-> be reverted by that cycle's `git reset --hard`. Closing it fully needs a
-> scope-aware rollback (revert only the failed agent's paths); that is deferred.
+> The only writer left outside the mutex is the **interactive** `opencode --agent
+> desk` (a human running a message by hand), which writes solely under the inbox
+> (`INTERACTIVE_SCOPE_RE`). That path is now handled directly: the
+> checkpoint-before-snapshot commits any pre-cycle interactive edit, and for any
+> cycle whose agent does **not** own the inbox the rollback is **scope-aware** — it
+> reverts the failed agent's own writes (in-scope work *and* out-of-scope
+> violations) with a path-scoped `git checkout`, while a concurrent inbox edit is
+> neither attributed to that agent by the contract check nor removed by the
+> rollback. A full `git reset --hard` is used only as a fallback when an agent
+> unexpectedly moves `HEAD` (agents do not commit; the runtime commits only on
+> success). The lone residual is an interactive edit made *during* a failing `desk`
+> or `groom` cycle — the two agents that legitimately own the inbox — which is a far
+> narrower window than a hard reset on every failed cycle.
 
 `decide.sh` publishes `decision.*` every time any Part V mechanism fires — this is
 what feeds the TUI's Decision Log (Part XII), the transparency piece that

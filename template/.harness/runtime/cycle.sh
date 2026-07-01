@@ -157,7 +157,7 @@ _review_and_distill() {
     if validate_contract review; then
       commit_cycle review "$task"
     else
-      rollback_cycle
+      rollback_cycle review
     fi
     LAST_FAIL_LOG="$rlog"
     memory_log_incident review "review verdict: retry for $task"
@@ -185,7 +185,7 @@ _distill() {
     (( after_skills > before_skills )) && events_emit distill.skill_created --loop distill --task "$task"
     (( after_mcp > before_mcp )) && events_emit distill.mcp_created --loop distill --task "$task"
   else
-    rollback_cycle
+    rollback_cycle distill
     memory_log_incident distill "out-of-scope write"
   fi
 }
@@ -213,7 +213,7 @@ escalate() {
     die "infrastructure/gate failure (not a task decision) after $FAILURES attempts — the gates or environment look broken (missing dependency or a malformed command in .harness/gates.local.sh). Fix it and re-run. Log: $LAST_FAIL_LOG"
   fi
 
-  rollback_cycle
+  rollback_cycle "$loop"
   memory_log_incident "$loop" "escalated after repeated failure/sterility (routed to a decision, not halted)"
   case "$loop" in
     build)
@@ -313,7 +313,7 @@ run_cycle() {
       [[ "$loop" == build && "$result" == pass ]] && _review_and_distill "$task"
       ;;
     violation)
-      rollback_cycle
+      rollback_cycle "$loop"
       LAST_FAIL_LOG="$logfile"
       memory_log_incident "$loop" "out-of-scope write"
       events_emit "${loop}.failed" --loop "$loop" --task "$task" --result fail --duration_ms "$dur_ms"
@@ -322,7 +322,7 @@ run_cycle() {
     *)
       # A failed attempt: discard its uncommitted partial work so nothing leaks
       # into the next cycle's contract check (every cycle ends committed or clean).
-      rollback_cycle
+      rollback_cycle "$loop"
       LAST_FAIL_LOG="$logfile"
       memory_log_incident "$loop" "$result"
       events_emit "${loop}.failed" --loop "$loop" --task "$task" --result fail --duration_ms "$dur_ms"

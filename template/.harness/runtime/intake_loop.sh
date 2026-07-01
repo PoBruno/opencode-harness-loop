@@ -60,7 +60,7 @@ main() {
       if validate_contract desk; then
         commit_cycle desk "intake" .harness/inbox .harness/PARKED.md
       else
-        rollback_cycle
+        rollback_cycle desk
         memory_log_incident desk "intake write out of scope"
       fi
       git_unlock

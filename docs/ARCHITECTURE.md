@@ -460,6 +460,22 @@ New domains relative to the previous version:
 > or `groom` cycle — the two agents that legitimately own the inbox — which is a far
 > narrower window than a hard reset on every failed cycle.
 
+> **Committed baseline (a precondition, not an option).** The whole model — the
+> per-cycle snapshot, the contract check (`git_changed_since_snapshot`), and the
+> rollback (`git reset --hard`) — is defined against *tracked* files. Untracked
+> files have no baseline to diff against or reset to, so on an as-yet-uncommitted
+> tree every file reads as an out-of-scope write and a rollback reverts nothing.
+> The installer deliberately leaves `.harness/` uncommitted for review, so the
+> **first real cycle establishes the baseline itself**: `ensure_baseline` (under the
+> git lock, before the snapshot) commits the working tree once — excluding the
+> ephemeral runtime dirs (`state/ events/ logs/ presentation/html`) — if any
+> non-ephemeral untracked file is present. It runs only on a real cycle (an idle
+> `--once` dry-run never commits) and is a no-op thereafter, since every steady-state
+> cycle ends either committed or rolled back to a clean tree. Consistent with this,
+> `git_changed_since_snapshot` reports only the untracked *delta* since the snapshot
+> (via `comm -13` against the recorded untracked set), never a pre-existing untracked
+> file — so a file that was already there is never mis-attributed to the agent.
+
 `decide.sh` publishes `decision.*` every time any Part V mechanism fires — this is
 what feeds the TUI's Decision Log (Part XII), the transparency piece that
 compensates for the system never asking anything: you do not approve decisions in

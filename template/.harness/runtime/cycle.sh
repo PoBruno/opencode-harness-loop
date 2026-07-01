@@ -243,6 +243,25 @@ escalate() {
 }
 
 # ---- one cycle ------------------------------------------------------------
+# The snapshot/contract/rollback model REQUIRES a committed baseline: without one,
+# every untracked file looks like an out-of-scope write to the contract check and
+# `git reset --hard` has nothing to revert. The installer deliberately leaves
+# `.harness/` uncommitted for the user to review, so the first real cycle often
+# starts on an untracked tree. If non-ephemeral untracked files exist at that point,
+# commit a one-time baseline (git_commit stages everything but the ephemeral runtime
+# dirs). It runs under the git lock, only on a real (non-idle) cycle — so the Phase-5
+# `--once` dry-run on an empty backlog never commits — and is a no-op thereafter,
+# since a steady-state cycle ends either committed or rolled back to a clean tree.
+ensure_baseline() {
+  git_available || return 0
+  local u
+  u="$(_git ls-files --others --exclude-standard 2>/dev/null | grep -vE "$HARNESS_RUNTIME_RE" | head -1)"
+  [[ -z "$u" ]] && return 0
+  log "working tree is uncommitted — committing a baseline so snapshot/rollback are exact"
+  git_commit "harness: baseline (tracking the working tree for snapshot/rollback)"
+  events_emit runtime.baseline_committed 2>/dev/null || true
+}
+
 run_cycle() {
   local loop; loop="$(next_loop)"
 
@@ -277,6 +296,7 @@ run_cycle() {
 
   local fpb fpa start logfile rc dur_ms result changed
   _acquire_git_lock "$loop"
+  ensure_baseline
   # Checkpoint any pending desk write (interactive `opencode --agent desk` OR the
   # watcher) BEFORE snapshotting, so this cycle's rollback can never silently erase
   # an uncommitted intake item. SCOPED to the inbox and PARKED only: any other dirty

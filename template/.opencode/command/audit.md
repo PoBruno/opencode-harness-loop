@@ -16,7 +16,7 @@ Documents and code to read:
 @.harness/specs/ROADMAP.md
 @.opencode/agent/desk.md
 @.opencode/agent/groom.md
-@.opencode/agent/plan.md
+@.opencode/agent/planner.md
 @.opencode/agent/build.md
 @.opencode/agent/review.md
 @.opencode/agent/distill.md

@@ -50,7 +50,7 @@ context_build() {
     desk)  sprint=""; inbox="$(_slurp "$INBOX_DIR/inbox.md")"; blocked="$(_slurp "$HARNESS_DIR/PARKED.md")"
            intake_msg="$(_slurp "$STATE_DIR/intake_message.txt")" ;;
     groom) sprint=""; inbox="$(_slurp "$INBOX_DIR/inbox.md")"; blocked="$(_slurp "$HARNESS_DIR/PARKED.md")" ;;
-    plan)  sprint="$(_slurp "$SPECS_DIR/SPRINT.md")"; inbox="$(_slurp "$INBOX_DIR/inbox.md")"; blocked="" ;;
+    planner)  sprint="$(_slurp "$SPECS_DIR/SPRINT.md")"; inbox="$(_slurp "$INBOX_DIR/inbox.md")"; blocked="" ;;
     *)     sprint="$(_slurp "$SPECS_DIR/SPRINT.md")"; inbox=""; blocked="" ;;
   esac
 
@@ -71,6 +71,23 @@ context_build() {
       loop: $loop,
       task_id: $task_id,
       task: $task,
+      paths: {
+        roadmap: ".harness/specs/ROADMAP.md",
+        sprint: ".harness/specs/SPRINT.md",
+        tasks_dir: ".harness/tasks/",
+        product: ".harness/specs/PRODUCT.md",
+        architecture: ".harness/specs/ARCHITECTURE.md",
+        decision_policy: ".harness/specs/DECISION_POLICY.md",
+        inbox: ".harness/inbox/inbox.md",
+        triaged_dir: ".harness/inbox/triaged/",
+        parked: ".harness/PARKED.md",
+        decisions: ".harness/memory/decisions.md",
+        assumptions: ".harness/memory/assumptions.md",
+        learnings: ".harness/memory/learnings.md",
+        patterns: ".harness/memory/patterns.md",
+        intent: ".harness/memory/intent.jsonl",
+        understanding: ".harness/state/understanding.json"
+      },
       architecture_excerpt: $architecture_excerpt,
       invariants: $invariants,
       intake_message: $intake_message,

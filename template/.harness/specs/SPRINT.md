@@ -12,7 +12,7 @@
                 SKIPPED by build. Runtime-owned: build/groom cannot flip it, so the
                 runtime marks parked on a block and un-parks (open) on recheck.
     escalated — a "!" in the checkbox; failed/stalled repeatedly, routed back to
-                `plan` to re-decide (smaller slice / reinterpret / auto-reject).
+                `planner` to re-decide (smaller slice / reinterpret / auto-reject).
 
   Only the open state feeds build; parked and escalated are invisible to the
   open/done counts, so a stuck task never blocks the ones behind it. Tasks group

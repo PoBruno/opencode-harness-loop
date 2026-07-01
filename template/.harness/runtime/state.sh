@@ -67,9 +67,9 @@ current_task() {
 # ---------------------------------------------------------------------------
 next_loop() {
   (( $(count_inbox_pending) > 0 ))     && { echo groom; return; }
-  (( $(count_sprint_escalated) > 0 ))  && { echo plan; return; }
+  (( $(count_sprint_escalated) > 0 ))  && { echo planner; return; }
   (( $(count_sprint_open) > 0 ))       && { echo build; return; }
-  (( $(count_roadmap_pending) > 0 ))   && { echo plan; return; }
+  (( $(count_roadmap_pending) > 0 ))   && { echo planner; return; }
   echo idle
 }
 
@@ -112,7 +112,7 @@ _contract_allow() {
   case "$1" in
     desk)    echo ".harness/inbox/inbox.md" ;;
     groom)   echo ".harness/specs/ROADMAP.md .harness/memory/intent.jsonl .harness/inbox/ .harness/PARKED.md" ;;
-    plan)    echo ".harness/specs/SPRINT.md .harness/specs/ROADMAP.md .harness/tasks/ .harness/memory/decisions.md .harness/memory/assumptions.md .harness/PARKED.md" ;;
+    planner) echo ".harness/specs/SPRINT.md .harness/specs/ROADMAP.md .harness/tasks/ .harness/memory/decisions.md .harness/memory/assumptions.md .harness/PARKED.md" ;;
     build)   echo ".harness/PARKED.md *" ;;
     review)  echo ".harness/memory/ .harness/state/understanding.json" ;;
     distill) echo ".harness/skills/ .harness/mcp/" ;;
@@ -185,7 +185,16 @@ validate_contract() {
   return $bad
 }
 
-commit_cycle() { git_commit "harness($1): cycle $(state_get cycle)${2:+ $2}"; }
+# commit_cycle <loop> <task> [paths...]
+# With no paths, git_commit stages everything (git add -A) — correct for the Main
+# Loop, whose agent (build) may write code anywhere. With paths, only those are
+# staged — used by the intake watcher (`desk` only owns the inbox) so it can never
+# sweep another writer's uncommitted work under a "desk" commit.
+commit_cycle() {
+  local loop="$1" task="${2:-}"
+  shift 2 2>/dev/null || true
+  git_commit "harness($loop): cycle $(state_get cycle)${task:+ $task}" "$@"
+}
 rollback_cycle() { git_rollback; }
 
 # ---- runtime-owned sprint mutations (agents cannot flip these checkboxes) ---
@@ -197,7 +206,7 @@ _flip_first_open() { # <new-marker, e.g. x | p | !>
 mark_first_task_parked()    { _flip_first_open p; }
 mark_first_task_escalated() { _flip_first_open '!'; }
 
-# Drop the first escalated ([!]) task line (last-resort unstick for a stuck plan).
+# Drop the first escalated ([!]) task line (last-resort unstick for a stuck planner).
 drop_first_escalated_task() {
   [[ -f "$SPRINT_FILE" ]] || return 0
   awk 'BEGIN{d=0} d==0 && /^[[:space:]]*-[[:space:]]+\[!\]/ { d=1; next } { print }' \

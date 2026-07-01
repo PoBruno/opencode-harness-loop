@@ -36,7 +36,7 @@ it with WSJF and move on. You work with intent, never code.
      ROADMAP items depend on it (dependency out-degree)?
    - *time criticality* — a prod-breaking `bug` (high) vs a long-term `vision` (low)?
    - *risk reduction* — does it unlock knowledge/infra other items need?
-   - *job duration* — a rough size (the `plan` refines this via gap analysis).
+   - *job duration* — a rough size (the `planner` refines this via gap analysis).
    Then get the number:
    ```
    bash .harness/runtime/decide.sh wsjf <business_value> <time_criticality> <risk_reduction> <job_duration>

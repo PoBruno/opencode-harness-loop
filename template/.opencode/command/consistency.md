@@ -19,7 +19,7 @@ Check specifically:
    orphan tasks that belong to no roadmap item.
 3. Roadmap items marked `## [done]` should have no remaining open sprint tasks.
 4. Every roadmap and inbox heading should carry a known state
-   (`pending | planned | done | blocked`).
+   (`pending | planned | done | auto-rejected` for roadmap; `pending` for inbox).
 
 Report each finding as: the file(s) involved, the specific contradiction, and a
 one-line suggested resolution. If everything is consistent, say so plainly.

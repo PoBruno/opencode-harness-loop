@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 # intake_loop.sh — the Half Loop. Low-frequency, conversational, human-triggered.
 #
-# The primary way to talk to intake is interactively: `opencode --agent intake`.
+# The primary way to talk to intake is interactively: `opencode --agent desk`.
 # This background watcher is the non-interactive half-loop: when a message file
-# is dropped into .harness/inbox/incoming/, it runs the desk agent on it
-# (which may write inbox.md), then archives the message. It never
-# consumes a Main-Loop cycle.
+# is dropped into .harness/inbox/incoming/, it runs the desk agent on it (which
+# may write inbox.md), then archives the message. It never consumes a Main-Loop
+# cycle.
+#
+# Like every Main-Loop phase, it does snapshot -> run -> validate ->
+# commit/rollback, so the desk's inbox write is COMMITTED (never left dangling in
+# the working tree where a Main-Loop rollback would silently erase it). A git
+# mutex serializes it with the Main Loop so the two never race the git index.
 
 set -uo pipefail
 
@@ -19,12 +24,22 @@ MESSAGE_HANDOFF="$HARNESS_DIR/state/intake_message.txt"
 
 # shellcheck source=events.sh
 source "$RUNTIME_DIR/events.sh"
+# shellcheck source=state.sh
+source "$RUNTIME_DIR/state.sh"     # validate_contract / commit_cycle / rollback_cycle (+ git.sh: lock/snapshot)
+# shellcheck source=memory.sh
+source "$RUNTIME_DIR/memory.sh"    # memory_log_incident
 # shellcheck source=context.sh
 source "$RUNTIME_DIR/context.sh"
 # shellcheck source=agents_run.sh
 source "$RUNTIME_DIR/agents_run.sh"
 
 : "${INTAKE_INTERVAL:=2}"
+: "${GIT_LOCK_WAIT:=120}"          # watcher yields to the Main Loop; retries every INTAKE_INTERVAL
+export GIT_LOCK_WAIT
+# Bound how long the watcher can hold the git mutex: desk is quick and
+# conversational, so it gets a short timeout (not the Main Loop's 30m PHASE_TIMEOUT),
+# so a hung intake can never stall the Main Loop for long.
+export PHASE_TIMEOUT="${INTAKE_TIMEOUT:-5m}"
 
 main() {
   mkdir -p "$INCOMING_DIR" "$PROCESSED_DIR"
@@ -32,11 +47,23 @@ main() {
     shopt -s nullglob
     local msg
     for msg in "$INCOMING_DIR"/*.md; do
+      # Serialize with the Main Loop. If it holds the git mutex (mid-cycle), skip
+      # and retry next pass — the message stays safely in incoming/, never processed
+      # without the commit protection.
+      git_lock || break
       events_emit intake.message_received --data "$(jq -cn --arg f "$(basename "$msg")" '{file:$f}' 2>/dev/null || echo '{}')"
       cp "$msg" "$MESSAGE_HANDOFF"
       context_build desk >/dev/null
+      git_snapshot
       local log="$HARNESS_DIR/logs/intake-$(date +%s).log"
       agents_run desk "$HARNESS_DIR/state/working_context.json" "$log" || true
+      if validate_contract desk; then
+        commit_cycle desk "intake" .harness/inbox .harness/PARKED.md
+      else
+        rollback_cycle
+        memory_log_incident desk "intake write out of scope"
+      fi
+      git_unlock
       mv "$msg" "$PROCESSED_DIR/$(date +%s)-$(basename "$msg")" 2>/dev/null || true
     done
     shopt -u nullglob

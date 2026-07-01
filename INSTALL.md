@@ -125,7 +125,7 @@ it for the human to tune at bootstrap.
 ### 3c. ROADMAP.md and SPRINT.md
 
 Already shipped with headers in `.harness/specs/`. Leave them empty — the
-`plan` agent fills them.
+`planner` agent fills them.
 
 ---
 

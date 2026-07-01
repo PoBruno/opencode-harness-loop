@@ -12,6 +12,32 @@ UNTRACKED_SNAPSHOT="$HARNESS_DIR/state/.pre_cycle_untracked"
 
 _git() { git -C "$PROJECT_DIR" "$@"; }
 
+# Runtime-OWNED paths: written by the engine itself (never by an agent), so they
+# must be excluded from the agent contract check and never removed on rollback —
+# otherwise a bookkeeping write (episodic history, the dashboard, the event bus)
+# leaks into the NEXT cycle's diff and is mis-attributed to the agent as an
+# out-of-scope write (a false-violation cascade that stalls the loop).
+HARNESS_RUNTIME_RE='^\.harness/(state|events|logs|memory/history|presentation/html)/'
+
+# Cross-process mutex. The Main Loop (cycle.sh) and the Half-Loop watcher
+# (intake_loop.sh) both mutate git; without serialization a watcher commit landing
+# mid-cycle would either be discarded by that cycle's rollback (silent loss of an
+# intake item) or be mis-attributed to the running agent. git_lock is held for the
+# whole git-critical section of each side; the low-frequency watcher simply waits
+# for the current cycle. Degrades to no-op if flock is unavailable.
+GIT_MUTEX="$HARNESS_DIR/state/.git.mutex"
+
+git_lock() {
+  command -v flock >/dev/null 2>&1 || return 0
+  mkdir -p "$(dirname "$GIT_MUTEX")"
+  exec 8>"$GIT_MUTEX" 2>/dev/null || return 0
+  flock -w "${GIT_LOCK_WAIT:-900}" 8   # 0 if acquired, non-zero on timeout
+}
+git_unlock() {
+  command -v flock >/dev/null 2>&1 || return 0
+  flock -u 8 2>/dev/null || true
+}
+
 git_available() {
   command -v git >/dev/null 2>&1 && _git rev-parse --is-inside-work-tree >/dev/null 2>&1
 }
@@ -37,10 +63,11 @@ git_changed_since_snapshot() {
       _git diff --name-only HEAD 2>/dev/null || true
     fi
     _git ls-files --others --exclude-standard 2>/dev/null || true
-  } | sort -u | grep -vE '^\.harness/(state|events|logs)/' || true
+  } | sort -u | grep -vE "$HARNESS_RUNTIME_RE" || true
 }
 
-# Commit a set of path prefixes with a message. Ephemeral output is never staged.
+# Commit a set of path prefixes with a message. Ephemeral output (state, events,
+# logs, the generated dashboard) is never staged; versioned memory/history IS.
 git_commit() {
   local msg="$1"; shift
   git_available || return 0
@@ -49,7 +76,8 @@ git_commit() {
   else
     _git add -A 2>/dev/null || true
   fi
-  _git reset -q -- "$HARNESS_DIR/state" "$HARNESS_DIR/events" "$HARNESS_DIR/logs" 2>/dev/null || true
+  _git reset -q -- "$HARNESS_DIR/state" "$HARNESS_DIR/events" "$HARNESS_DIR/logs" \
+    "$HARNESS_DIR/presentation/html" 2>/dev/null || true
   if ! _git diff --cached --quiet 2>/dev/null; then
     _git commit -q -m "$msg" 2>/dev/null || true
   fi
@@ -68,7 +96,8 @@ git_rollback() {
   while IFS= read -r f; do
     [[ -n "$f" ]] && rm -f "$PROJECT_DIR/$f" 2>/dev/null || true
   done < <(comm -13 <(sort "$UNTRACKED_SNAPSHOT") \
-                    <(_git ls-files --others --exclude-standard 2>/dev/null | sort))
+                    <(_git ls-files --others --exclude-standard 2>/dev/null | sort) \
+           | grep -vE "$HARNESS_RUNTIME_RE")
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

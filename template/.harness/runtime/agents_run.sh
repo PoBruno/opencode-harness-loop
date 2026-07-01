@@ -19,7 +19,7 @@ AGENT_PID=""   # exported for the caller's interrupt trap
 
 _agent_prompt() {
   local loop="$1"
-  local base="Read .harness/state/working_context.json for your inputs, then run EXACTLY ONE ${loop} cycle now, following your agent instructions and AGENTS.md. Write only within your declared scope."
+  local base="Read .harness/state/working_context.json FIRST for your inputs and the canonical file paths (its \`paths\` object — use those exact paths, do not guess). Then run EXACTLY ONE ${loop} cycle now, following your agent instructions and AGENTS.md. Write only within your declared scope, and actually WRITE your outputs to disk before finishing (do not report success without producing the files your role owns)."
   case "$loop" in
     build) printf '%s %s' "$base" "Run the gates serially before finishing. End with one marker on its own line: RALPH_DONE (success), RALPH_BLOCKED (cannot finish), or RALPH_ALL_DONE (no open tasks). Also print 'RESULT: pass' or 'RESULT: fail'." ;;
     *)     printf '%s %s' "$base" "End with one line: 'RESULT: pass' on success or 'RESULT: fail' if you could not complete." ;;

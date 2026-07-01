@@ -1,6 +1,6 @@
 ---
 description: One-time project bootstrap — populate the specs, invariants, and decision policy
-agent: plan
+agent: planner
 subtask: false
 ---
 
@@ -37,7 +37,7 @@ rather than guessing:
    human's judgment enters structurally; after this the loop prioritizes on its own.
 
 5. **Seed `.harness/specs/ROADMAP.md`** with the first `## [pending]` items. Leave
-   `SPRINT.md` empty — `plan` fills it.
+   `SPRINT.md` empty — `planner` fills it.
 
 6. **Generate the core skills** under `.harness/skills/` via the `skill-creator`
    skill (one or two; `distill` grows more later).

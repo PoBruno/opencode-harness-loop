@@ -29,7 +29,12 @@ today's raw log at `.harness/memory/history/{today}.jsonl`.
 
 ## Protocol
 
-1. **Gates.** `bash .harness/runtime/gates.sh`. Failure ⇒ retry, not done.
+1. **Gates.** `bash .harness/runtime/gates.sh`. On failure, decide WHY: if the
+   **code** is wrong (a test assertion, a type error) it is a retry (step 3). If the
+   **gate/environment** is broken (a missing dependency, a command not found, a
+   malformed gate) it is NOT the task's fault — say so plainly, naming the missing
+   tool. The runtime detects the infrastructure signature and halts for a human,
+   rather than pointlessly re-planning a correct task.
 2. **Contract.** Confirm the diff satisfies the task's acceptance criterion. Reject
    scope creep.
 3. **Verdict.**

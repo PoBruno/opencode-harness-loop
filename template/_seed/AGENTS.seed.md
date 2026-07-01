@@ -46,7 +46,7 @@ The runtime enforces these and rolls back any out-of-scope write:
 
 - `desk`    → `.harness/inbox/inbox.md`
 - `groom`   → `.harness/specs/ROADMAP.md`, `.harness/memory/intent.jsonl`, `.harness/inbox/`, `.harness/PARKED.md`
-- `plan`    → `.harness/specs/SPRINT.md`, `ROADMAP.md`, `.harness/tasks/`, `.harness/memory/decisions.md`, `assumptions.md`, `.harness/PARKED.md`
+- `planner`    → `.harness/specs/SPRINT.md`, `ROADMAP.md`, `.harness/tasks/`, `.harness/memory/decisions.md`, `assumptions.md`, `.harness/PARKED.md`
 - `build`   → project code only (plus `.harness/PARKED.md` for a missing resource)
 - `review`  → `.harness/memory/`, `.harness/state/understanding.json`
 - `distill` → `.harness/skills/`, `.harness/mcp/`

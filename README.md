@@ -1,95 +1,93 @@
-# **Opencode** Loop Harness 
+# Opencode Loop Harness
 
-This repository is a Ralph loop method with two loops (conversational Half Loop + autonomous Main Loop) man-in-the-loop, a **Decision Engine**. CoALA memory, quality gates, and a Presentation Layer (a Textual TUI with a Decision Log, plus a static HTML dashboard method).
+An autonomous-development **runtime** you drop into any project. You dump intake;
+a Ralph loop (two loops, a Decision Engine, gates, on-disk memory) builds it,
+and **never stops to ask you what to do**. It decides, records why, and keeps going.
 
-Two loops that meet only through the inbox, and after intake:
+## Install
 
-```
-  Half Loop                                     Main Loop
-  ───────────────────────────────────          ───────────────────────────────
-  you ─► desk ─► inbox.md ─► groom ─► plan ─► build ─► review ─► distill
-                              (WSJF)  (decide) (code)  (gates)   (skills/MCP)
-```
-
-More details:
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-- [`INSTALL.md`](INSTALL.md)
-- [`docs/INSTALLER-DESIGN.md`](docs/INSTALLER-DESIGN.md)
-
----
-
-## **Prompt to install**
+Open OpenCode at your project root and paste:
 
 ```
-Install the Ralph loop Harness (an autonomous-development runtime [github.com/pobruno/opencode-harness-loop]) into THIS project. Read this file in full and follow it end to end as the single source of truth:
-https://raw.githubusercontent.com/pobruno/opencode-harness-loop/main/INSTALL.md
+Install the Opencode Loop Harness (an autonomous-development runtime, github.com/PoBruno/opencode-harness-loop) into THIS project. Read this file in full and follow it end to end as the single source of truth:
+https://raw.githubusercontent.com/PoBruno/opencode-harness-loop/main/INSTALL.md
 Don't skip phases. Stop and ask before any destructive action.
 ```
 
-> That is the whole prompt, a single instruction. [`INSTALL.md`](INSTALL.md) is the complete playbook ("the brain").
+One instruction. [`INSTALL.md`](INSTALL.md) is the whole playbook ("the brain") —
+the agent clones, recons your code, installs, generates the specs, and cleans up.
 
----
+<!-- drop your TUI gif at docs/media/tui.gif -->
+<p align="center">
+  <img src="docs/media/tui.gif" alt="Harness TUI" width="820">
+</p>
 
-- **desk** is the only agent you talk to. It structures your input and files it into the inbox.
-- The **Decision Engine** makes all routine development decisions—prioritization, planning, decomposition, conflict resolution, and risk assessment.
-- **Architecture invariants** define the only non-negotiable constraints; quality gates keep the implementation correct.
-- Only tasks blocked by real external dependencies are parked. Everything else keeps moving.
-- Every decision is recorded and visible through the live **Decision Log** and the HTML dashboard.
+## How it works
 
-Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design.
+```
+  Half Loop (you dump, it never asks)      Main Loop (autonomous)
+  ───────────────────────────────────      ──────────────────────
+  you ─► desk ─► inbox.md ─► groom ─► planner ─► build ─► review ─► distill
+                             (WSJF)  (decide) (code)  (gates)   (skills)
+```
 
----
+- **desk** is the only agent you talk to — it files your dump into the inbox.
+- The **Decision Engine** resolves every ambiguity mechanically: WSJF priority,
+  vertical-slice decomposition, precedence hierarchy, one-way/two-way doors,
+  assumption logging. No `ask:`, ever.
+- **Invariants** (you write once) are the only absolute veto; **gates** keep the
+  code correct. A stall **escalates** to a fresh decision instead of halting.
+- The only thing that ever waits on you is a missing external resource (an API
+  key) → one task parks, the loop keeps flowing.
+- Every decision is on the bus → live **Decision Log** (TUI) + static HTML dashboard.
 
-## Daily usage
+Full design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## Daily use
 
 ```bash
-opencode --agent desk                         # Add new work
-bash .harness/loop.sh                         # Run the runtime
-python .harness/presentation/textual/app.py   # Open the TUI
-bash .harness/dashboard.sh                    # Generate dashboard
+opencode --agent desk                          # dump work into the inbox
+bash .harness/loop.sh                          # run (--once | --daemon)
+python .harness/presentation/textual/app.py    # TUI: r run · x stop · d decisions · q quit
+bash .harness/dashboard.sh                      # regenerate the static dashboard
 ```
 
-Useful commands:
-```
-/status
-/consistency
-/bootstrap
-```
+Inside OpenCode: `/status` · `/consistency` · `/audit` · `/bootstrap`.
 
----
+## Requirements
 
-## Repository layout
+Linux + Docker · `bash git jq coreutils` · `opencode` (authenticated). TUI is
+optional (`pip install -r .harness/presentation/textual/requirements.txt`).
 
-```
-opencode-harness-loop/
-├── README.md                  # you are here — entry point + install prompt
-├── INSTALL.md                 # the agent install playbook (single source of truth)
-├── docs/
-│   ├── ARCHITECTURE.md        # the definitive design (Autonomous Decision Doctrine)
-│   └── INSTALLER-DESIGN.md    # why the installer works the way it does
-└── template/                  # everything copied/generated into your project
-    ├── .harness/  .opencode/  opencode.json
-    └── _seed/                 # moulds the installer fills by reading your code
-```
-
-## What ends up installed
+<details>
+<summary>What gets installed</summary>
 
 ```
 your-project/
-├── AGENTS.md                 # the constitution (generated from your project)
-├── opencode.json             # base config (merged, not clobbered)
-└── .harness/                 # the whole runtime, self-contained
-    ├── loop.sh  dashboard.sh # friendly entrypoints
-    ├── runtime/              # scheduler, cycle, state, events, gates, +decide/scoring/precedence
-    ├── specs/                # PRODUCT, ARCHITECTURE (+INVARIANTS), ROADMAP, SPRINT, DECISION_POLICY
-    ├── inbox/                # inbox.md (your dump) + triaged/
-    ├── PARKED.md             # tasks stopped ONLY by a missing external resource
-    ├── tasks/                # TASK-*.md
-    ├── memory/               # decisions, assumptions, learnings, patterns, intent, history/ (CoALA)
-    ├── events/  state/        # the bus + runtime.json/understanding.json
-    ├── skills/  mcp/          # procedural memory (grown by distill)
-    └── presentation/         # textual/ TUI (+ Decision Log) + html/ static dashboard
+├── AGENTS.md            # constitution (generated from your code)
+├── opencode.json        # base config (merged, not clobbered)
+└── .harness/
+    ├── loop.sh  dashboard.sh
+    ├── runtime/         # scheduler, cycle, state, events, gates + decide/scoring/precedence
+    ├── specs/           # PRODUCT, ARCHITECTURE (+INVARIANTS), ROADMAP, SPRINT, DECISION_POLICY
+    ├── inbox/  PARKED.md # your dump + the only human-facing wait
+    ├── tasks/  memory/   # TASK-*.md + CoALA (decisions, assumptions, learnings, patterns, history)
+    ├── events/  state/   # the bus + runtime.json / understanding.json
+    ├── skills/  mcp/      # procedural memory (grown by distill)
+    └── presentation/     # textual/ TUI (+ Decision Log) + html/ dashboard
 ```
 
-Agents live in `.opencode/agent/` (opencode-native); skills under
-`.harness/skills/` are registered via `opencode.json`.
+Agents live in `.opencode/agent/`; skills under `.harness/skills/` (via `opencode.json`).
+</details>
+
+<details>
+<summary>Repository layout</summary>
+
+```
+opencode-harness-loop/
+├── README.md            # entry point + install prompt
+├── INSTALL.md           # the agent install playbook (single source of truth)
+├── docs/                # ARCHITECTURE.md, INSTALLER-DESIGN.md
+└── template/            # everything copied/generated into your project (.harness/, .opencode/, _seed/)
+```
+</details>

@@ -1,0 +1,38 @@
+{
+  "_comment": "MCP manifest. The installer (INSTALL.md, Phase 4) reads this and registers each server into the target project's opencode.json `mcp` block. Rules: never invent secrets (use {env:VAR} placeholders + .env.example); skip servers already configured; do not install servers marked on_demand until the project actually needs them (they are synthesized later via the mcp-synth skill).",
+  "servers": [
+    {
+      "name": "playwright",
+      "type": "local",
+      "command": ["npx", "-y", "@playwright/mcp", "--headless"],
+      "enabled": false,
+      "on_demand": true,
+      "purpose": "Headless browser for visual/perceptual verification (screenshots that back [human] tasks). Synthesize when the front-end arrives.",
+      "credentials": []
+    },
+    {
+      "name": "context7",
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "enabled": false,
+      "on_demand": true,
+      "purpose": "Up-to-date library/API documentation lookup. Enable if the project leans on fast-moving third-party libraries.",
+      "credentials": []
+    },
+    {
+      "name": "_example_remote_with_auth",
+      "type": "remote",
+      "url": "https://api.example.com/mcp",
+      "enabled": false,
+      "on_demand": true,
+      "purpose": "Template entry showing the credential pattern. Copy, rename, and enable for a real service. Do NOT enable this placeholder.",
+      "headers": { "Authorization": "Bearer {env:EXAMPLE_MCP_TOKEN}" },
+      "credentials": [
+        {
+          "env": "EXAMPLE_MCP_TOKEN",
+          "description": "API token for the example service. Add the real value to .env (never commit it)."
+        }
+      ]
+    }
+  ]
+}

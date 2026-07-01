@@ -1,0 +1,14 @@
+# This is the template repository. The payload under template/ — including
+# template/.harness/, template/.opencode/, template/state/, template/logs/ — is
+# the product and MUST stay versioned. Only ignore genuine junk here.
+
+# Install scaffolding (in case someone tests the installer inside this repo)
+.harness-tmp/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/

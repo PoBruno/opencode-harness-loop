@@ -69,14 +69,19 @@ git_snapshot() {
   _git ls-files --others --exclude-standard >"$UNTRACKED_SNAPSHOT" 2>/dev/null || : >"$UNTRACKED_SNAPSHOT"
 }
 
-# Files changed since the snapshot (tracked diffs + untracked), excluding
-# runtime-owned output that the engine writes itself. With an optional <loop>, a
-# concurrent interactive edit the loop does not own (see INTERACTIVE_SCOPE_RE) is
-# also dropped, so it is never mis-attributed to the running agent.
+# Files changed since the snapshot (tracked diffs + NEW untracked), excluding
+# runtime-owned output that the engine writes itself. Only untracked files that
+# appeared SINCE the snapshot are reported (delta vs UNTRACKED_SNAPSHOT) — a file
+# that was already untracked when the snapshot was taken is not the running agent's
+# doing, so attributing it would be a false out-of-scope violation (this is exactly
+# what breaks when the harness is run against an as-yet-uncommitted tree). With an
+# optional <loop>, a concurrent interactive edit the loop does not own (see
+# INTERACTIVE_SCOPE_RE) is also dropped.
 git_changed_since_snapshot() {
   local loop="${1:-}"
   git_available || return 0
   local pre; pre="$(cat "$SNAPSHOT_FILE" 2>/dev/null || echo "")"
+  local usnap="$UNTRACKED_SNAPSHOT"; [[ -f "$usnap" ]] || usnap=/dev/null
   local f
   {
     if [[ -n "$pre" ]]; then
@@ -84,7 +89,8 @@ git_changed_since_snapshot() {
     else
       _git diff --name-only HEAD 2>/dev/null || true
     fi
-    _git ls-files --others --exclude-standard 2>/dev/null || true
+    comm -13 <(sort "$usnap" 2>/dev/null) \
+             <(_git ls-files --others --exclude-standard 2>/dev/null | sort) 2>/dev/null || true
   } | sort -u | grep -vE "$HARNESS_RUNTIME_RE" | while IFS= read -r f; do
     _foreign_interactive "$loop" "$f" && continue
     printf '%s\n' "$f"

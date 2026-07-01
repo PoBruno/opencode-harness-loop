@@ -34,6 +34,11 @@ return the slice — do not read the whole repo. Keep under ~100k tokens.
 > Search and write may fan out across many subagents in parallel.
 > **Validation always uses a single subagent, in series** — the correctness
 > signal must arrive through one funnel.
+>
+> **Never `Read` binary or media files** (`*.png`, `*.jpg`, `*.gif`, `*.pdf`,
+> `*.ico`, `*.woff`, archives, compiled artefacts). Many models reject image
+> input and the cycle fails on the error (e.g. "Cannot read image.png"). Refer to
+> such files by path; if a subagent must inventory a directory, list names only.
 
 ## [Harness] Completion markers
 

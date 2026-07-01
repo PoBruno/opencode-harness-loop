@@ -27,6 +27,15 @@ the task files, decisions, assumptions — to disk every cycle; you only avoid e
 the project's **source code** (that is `build`'s job). You read code via the
 `explore` subagent.
 
+Every task you queue must end in **running code** that `build` can implement — a
+task whose only deliverable is a document is off-contract (the sole exception: the
+human explicitly asked for documentation and nothing else). A `vision`/`modeling`
+item is direction: you **decide** its concrete shape against the project's contracts
+(logging the assumption), then queue the smallest buildable slice of it. Studying is
+allowed only as *just enough* design to build that slice — never a task that ends in
+prose. If you need to de-risk a genuine one-way door first, make the spike small and
+queue the follow-up build slice in the same cycle.
+
 ## Inputs
 
 `.harness/state/working_context.json`, the pending ROADMAP item,
@@ -38,9 +47,12 @@ the project's **source code** (that is `build`'s job). You read code via the
 Do gap analysis against the real code first. Then:
 
 1. **Vertical slice.** Decompose the item into the smallest slice that delivers
-   observable value on its own, and queue only that as tasks in `SPRINT.md` +
-   `.harness/tasks/TASK-*.md`. The rest returns to `ROADMAP.md` as child items
-   (`## [pending]`), each re-scored by WSJF next `groom`. Emit
+   **observable value** — value the user can *see or run* (a rendered screen even if
+   stubbed, a working endpoint even if mocked, a changed behaviour behind a flag),
+   **not** "a document now exists". Queue only that slice as tasks in `SPRINT.md` +
+   `.harness/tasks/TASK-*.md`, each with a runnable acceptance check `build` can meet
+   (what a user does, what they then see). The rest returns to `ROADMAP.md` as child
+   items (`## [pending]`), each re-scored by WSJF next `groom`. Emit
    `decide.sh event task.decomposed --task <R-id>`.
 2. **Reinterpret under invariants.** If the request conflicts with an architecture
    invariant, the invariant wins (precedence: `decide.sh precedence invariant

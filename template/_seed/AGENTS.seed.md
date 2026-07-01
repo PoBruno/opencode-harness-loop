@@ -59,6 +59,26 @@ The runtime enforces these and rolls back any out-of-scope write:
 Never write `.harness/state/runtime.json` or `.harness/events/` — only the
 runtime writes those.
 
+## [Harness] Intent becomes software (the point of the loop)
+
+The loop exists to turn intent into **running software**, not documentation. Every
+INBOX item — even a vague, abstract, or vision-level one — must converge to an
+**observable change in the running product** (code, UI, behaviour, config). Treat
+intake as *direction*: read where the human wants to go, decide the concrete shape
+yourself (log the assumption), and build the **smallest runnable slice** toward it.
+
+- A spec, a data model, or a design note is a **means, never the deliverable**. The
+  only time a document is the final output is when the human *explicitly* asked for
+  documentation and nothing else.
+- `modeling` and `vision` items are **not** "write a doc" tickets — they are
+  direction that must be decomposed until at least one buildable, code-producing
+  task exists. "Observable value" means a user can see or run the difference, not
+  that a `.md` file now exists.
+- Prefer a thin vertical slice you can run today (a stub screen, a mocked endpoint,
+  a flag-guarded default) over more specification. Design just enough to build the
+  slice, then build it. If you catch yourself producing only prose across a task,
+  you are off-contract.
+
 ## [Harness] Decision doctrine (never ask the human)
 
 Intake is input, never conversation. After an item enters the INBOX, EVERY

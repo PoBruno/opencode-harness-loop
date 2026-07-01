@@ -45,19 +45,23 @@ Full design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Daily use
 
+One entrypoint — `.harness/run` (no extension; `chmod +x` once):
+
 ```bash
-opencode --agent desk                          # dump work into the inbox
-bash .harness/loop.sh                          # run (--once | --daemon)
-python .harness/presentation/textual/app.py    # TUI: r run · x stop · d decisions · q quit
-bash .harness/dashboard.sh                      # regenerate the static dashboard
+cd .harness
+./run tui        # open the TUI (auto-creates the venv on first run)
+./run daemon     # run the loop headless, waiting for new work (also: once | loop | stop)
+./run desk       # dump work into the inbox (interactive; or: ./run desk "one message")
+./run dashboard  # regenerate the static HTML dashboard
+./run doctor     # check prerequisites · ./run help for everything
 ```
 
 Inside OpenCode: `/status` · `/consistency` · `/audit` · `/bootstrap`.
 
 ## Requirements
 
-Linux + Docker · `bash git jq coreutils` · `opencode` (authenticated). TUI is
-optional (`pip install -r .harness/presentation/textual/requirements.txt`).
+Linux + Docker · `bash git jq coreutils` · `opencode` (authenticated). The TUI
+also needs `python3`; `./run tui` builds its own venv (`python3-venv` if missing).
 
 <details>
 <summary>What gets installed</summary>
@@ -67,6 +71,7 @@ your-project/
 ├── AGENTS.md            # constitution (generated from your code)
 ├── opencode.json        # base config (merged, not clobbered)
 └── .harness/
+    ├── run              # single entrypoint (tui · daemon · desk · dashboard · doctor)
     ├── loop.sh  dashboard.sh
     ├── runtime/         # scheduler, cycle, state, events, gates + decide/scoring/precedence
     ├── specs/           # PRODUCT, ARCHITECTURE (+INVARIANTS), ROADMAP, SPRINT, DECISION_POLICY

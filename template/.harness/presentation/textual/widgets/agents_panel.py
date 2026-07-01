@@ -1,6 +1,6 @@
 from textual.widgets import Static
 
-_LOOPS = ["desk", "groom", "plan", "build", "review", "distill"]
+_LOOPS = ["desk", "groom", "planner", "build", "review", "distill"]
 
 
 class AgentsPanel(Static):

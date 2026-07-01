@@ -86,8 +86,9 @@ Conflict rules:
   an existing file without asking.
 - The Harness's `build` agent intentionally overrides opencode's built-in of the
   same name — call this out so the owner understands.
-- Ensure scripts are executable:
-  `chmod +x .harness/*.sh .harness/runtime/*.sh .harness/presentation/html/*.sh`.
+- Ensure scripts are executable — **including the extension-less `.harness/run`
+  entrypoint** (the user drives everything through `./run`):
+  `chmod +x .harness/run .harness/*.sh .harness/runtime/*.sh .harness/presentation/html/*.sh`.
 
 The template already ships the empty state/event/log/tasks directories (with
 `.gitkeep`). Do not delete them.
@@ -163,9 +164,10 @@ Confirm the installation is coherent, without a full agent run:
    shows the detected gates. If auto-detection misses the real commands, write
    `.harness/gates.local.sh` exporting `GATE_TYPECHECK`, `GATE_LINT`,
    `GATE_TEST`, `GATE_BUILD`.
-6. **TUI (optional):** if Python is present, note that
-   `pip install -r .harness/presentation/textual/requirements.txt` enables the
-   Textual TUI. Do not install it unless asked.
+6. **TUI (optional):** the single entrypoint `./run` manages it. `./run doctor`
+   reports prerequisites; `./run tui` builds a local virtualenv
+   (`.harness/.venv`) from `presentation/textual/requirements.txt` and opens the
+   interface. Do not build it unless asked — the loop needs no Python.
 
 Do not force anything to pass — confirm the pieces come up.
 
@@ -176,10 +178,11 @@ Do not force anything to pass — confirm the pieces come up.
 1. Delete the clone: `rm -rf .harness-tmp`.
 2. Adjust `.gitignore` for the ephemeral artefacts that do **not** go to git:
    `.harness/state/`, `.harness/events/`, `.harness/logs/`,
-   `.harness/presentation/html/index.html`, and any real `.env`. Keep versioned:
-   `.harness/specs/`, `.harness/memory/` (long-term memory is part of the
-   project), `.harness/runtime/`, `.harness/presentation/`, `.harness/skills/`,
-   `AGENTS.md`, `.opencode/`, `opencode.json`.
+   `.harness/presentation/html/index.html`, `.harness/.venv/` (the TUI
+   virtualenv — the harness already ships `.harness/.gitignore` for it), and any
+   real `.env`. Keep versioned: `.harness/specs/`, `.harness/memory/` (long-term
+   memory is part of the project), `.harness/runtime/`, `.harness/presentation/`,
+   `.harness/skills/`, `.harness/run`, `AGENTS.md`, `.opencode/`, `opencode.json`.
 3. **Do not** commit automatically — let the user review the diff.
 
 ---
@@ -196,9 +199,10 @@ Deliver a clear summary:
 - **Human pending items:** credentials to fill in `.env` (one line per MCP), and
   any open decision.
 - **Next step:** run `/bootstrap` (or paste the bootstrap prompt) to populate the
-  specs, the ARCHITECTURE invariants, and the decision policy (the WSJF weights),
-  then `bash .harness/loop.sh` for the first cycle — or open the Textual TUI. Use
-  `opencode --agent desk` to dump work into the inbox.
+  specs, the ARCHITECTURE invariants, and the decision policy (the WSJF weights).
+  Then drive everything from the single entrypoint: `cd .harness && ./run doctor`
+  to check the machine, `./run daemon` for the first headless run (or `./run tui`
+  for the interface), and `./run desk` to dump work into the inbox.
 
 Confirm `.harness-tmp` was removed and the project is self-sufficient.
 

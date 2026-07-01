@@ -1,0 +1,224 @@
+#!/usr/bin/env bash
+# run — the single entrypoint for the Ralph Harness.
+#
+# One command surface for everything: the Textual TUI, the loop, the dashboard,
+# inbox intake, environment prep, and diagnostics. It is a thin, failure-proof
+# facade over the internal scripts (loop.sh, dashboard.sh, presentation/textual/
+# app.py) so a human only ever needs to remember `./run`.
+#
+# It has NO extension on purpose — the whole surface is `./run <command>`. Make it
+# executable once (`chmod +x .harness/run`); after that:
+#
+#     cd .harness
+#     ./run doctor        # check the machine is ready
+#     ./run tui           # prep the venv (first run) and open the TUI
+#     ./run daemon        # run the loop headless, waiting for new work
+#     ./run help          # everything else
+#
+# If your shell blocks `./run` (noexec mount, etc.), `bash run <command>` always
+# works. The Python virtualenv it manages lives at `.harness/.venv` and is used
+# ONLY by the TUI; the loop itself needs just bash + git + jq + opencode.
+
+set -uo pipefail
+
+# Resolve our own location so the command works from anywhere:
+#   ./run (cwd .harness) | bash .harness/run (cwd project root) | absolute path
+HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$HARNESS_DIR/.." && pwd)"
+VENV_DIR="$HARNESS_DIR/.venv"
+TUI_DIR="$HARNESS_DIR/presentation/textual"
+REQ_FILE="$TUI_DIR/requirements.txt"
+RUNTIME_JSON="$HARNESS_DIR/state/runtime.json"
+
+# ---- output helpers (stderr, never pollute a piped stdout) ------------------
+if [ -t 2 ]; then C_B=$'\033[1m'; C_D=$'\033[2m'; C_R=$'\033[0m'; C_Y=$'\033[33m'; C_G=$'\033[32m'; C_E=$'\033[31m'
+else C_B=; C_D=; C_R=; C_Y=; C_G=; C_E=; fi
+info()  { printf '%s\n' "${C_D}·${C_R} $*" >&2; }
+ok()    { printf '%s\n' "${C_G}✓${C_R} $*" >&2; }
+warn()  { printf '%s\n' "${C_Y}!${C_R} $*" >&2; }
+die()   { printf '%s\n' "${C_E}✗ $*${C_R}" >&2; exit 1; }
+
+# ---------------------------------------------------------------------------
+# Python virtualenv — created lazily, idempotently, and as failure-proof as a
+# script can be without assuming root or a specific package manager.
+# ---------------------------------------------------------------------------
+PY=""
+_find_python() {
+  [ -n "$PY" ] && return 0
+  PY="$(command -v python3 || command -v python || true)"
+  [ -n "$PY" ] || die "Python 3 not found. Install Python 3.9+ and re-run.
+  Debian/Ubuntu: sudo apt install python3 python3-venv
+  Fedora:        sudo dnf install python3
+  macOS:         brew install python"
+}
+
+_venv_python() { printf '%s' "$VENV_DIR/bin/python"; }
+_venv_exists() { [ -x "$VENV_DIR/bin/python" ]; }
+
+_sha_of() {
+  if   command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum    >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
+  elif command -v md5sum    >/dev/null 2>&1; then md5sum "$1" | awk '{print $1}'
+  else cksum "$1" | awk '{print $1}'; fi
+}
+
+_create_venv() {
+  _find_python
+  info "creating virtualenv at ${VENV_DIR#$PROJECT_DIR/}"
+  if "$PY" -m venv "$VENV_DIR" >/dev/null 2>&1; then
+    return 0
+  fi
+  warn "the stdlib 'venv' module is unavailable — trying virtualenv"
+  if "$PY" -m virtualenv "$VENV_DIR" >/dev/null 2>&1; then
+    return 0
+  fi
+  warn "installing 'virtualenv' locally (pip --user, no root)"
+  if "$PY" -m pip install --user -q virtualenv >/dev/null 2>&1 \
+     && "$PY" -m virtualenv "$VENV_DIR" >/dev/null 2>&1; then
+    return 0
+  fi
+  die "could not create a Python virtualenv.
+  Install the venv module and re-run './run prep':
+    Debian/Ubuntu: sudo apt install python3-venv
+    Fedora:        sudo dnf install python3-virtualenv
+    Arch:          (bundled with python)
+  (the TUI needs it; the loop does not — './run daemon' still works)"
+}
+
+# Ensure the venv exists and requirements are installed. Cheap on repeat runs:
+# a stamp of the requirements hash skips reinstalling when nothing changed.
+ensure_venv() {
+  _venv_exists || _create_venv
+  [ -f "$REQ_FILE" ] || { warn "no requirements.txt — skipping deps"; return 0; }
+  local sha stamp; sha="$(_sha_of "$REQ_FILE")"; stamp="$VENV_DIR/.req.sha"
+  if [ -f "$stamp" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$sha" ]; then
+    return 0
+  fi
+  info "installing TUI dependencies (textual)…"
+  "$(_venv_python)" -m pip install --upgrade -q pip >/dev/null 2>&1 || true
+  if ! "$(_venv_python)" -m pip install -q -r "$REQ_FILE"; then
+    die "pip install failed (see output above).
+  Check network/permissions, then re-run: ./run prep"
+  fi
+  printf '%s\n' "$sha" > "$stamp"
+  ok "TUI dependencies ready"
+}
+
+# ---- runtime state helpers --------------------------------------------------
+_runtime_pid() { jq -r '.pid // 0' "$RUNTIME_JSON" 2>/dev/null || echo 0; }
+_runtime_alive() { local p; p="$(_runtime_pid)"; [ "${p:-0}" -gt 0 ] 2>/dev/null && kill -0 "$p" 2>/dev/null; }
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+cmd_tui() {
+  ensure_venv
+  info "opening the Ralph Harness TUI (q to quit)"
+  exec "$(_venv_python)" "$TUI_DIR/app.py" "$@"
+}
+
+cmd_prep() {
+  ensure_venv
+  ok "environment ready — './run tui' to open the interface"
+}
+
+cmd_loop()    { exec bash "$HARNESS_DIR/loop.sh" "$@"; }
+cmd_daemon()  { exec bash "$HARNESS_DIR/loop.sh" --daemon "$@"; }
+cmd_once()    { exec bash "$HARNESS_DIR/loop.sh" --once "$@"; }
+cmd_dashboard() { exec bash "$HARNESS_DIR/dashboard.sh" "$@"; }
+
+cmd_stop() {
+  if _runtime_alive; then
+    local p; p="$(_runtime_pid)"
+    kill -TERM "$p" 2>/dev/null && ok "sent stop signal to the runtime (pid $p)"
+  else
+    info "the runtime is not running"
+  fi
+}
+
+cmd_status() {
+  [ -f "$RUNTIME_JSON" ] || { info "no runtime state yet — nothing has run"; return 0; }
+  local alive; _runtime_alive && alive="${C_G}alive${C_R}" || alive="${C_D}stopped${C_R}"
+  jq -r '"health : \(.health)\ncycle  : \(.cycle)\nloop   : \(.active_loop)\ntask   : \(.current_task // "-")\nmessage: \(.message // "")"' \
+    "$RUNTIME_JSON" >&2 || warn "could not read $RUNTIME_JSON"
+  printf 'runtime: %b\n' "$alive" >&2
+}
+
+cmd_desk() {
+  command -v opencode >/dev/null 2>&1 || die "opencode is not on PATH — install it first"
+  if [ "$#" -gt 0 ]; then
+    exec opencode run --agent desk "$*"      # one-shot: dump a message and return
+  else
+    exec opencode --agent desk               # interactive intake session
+  fi
+}
+
+cmd_doctor() {
+  local rc=0
+  _check() { # <label> <ok?> <hint>
+    if [ "$2" = 0 ]; then ok "$1"; else warn "$1 — $3"; rc=1; fi
+  }
+  info "checking prerequisites…"
+  command -v git      >/dev/null 2>&1; _check "git"      $? "required by the runtime"
+  command -v jq       >/dev/null 2>&1; _check "jq"       $? "required by the runtime"
+  command -v awk      >/dev/null 2>&1; _check "awk"      $? "required by the runtime"
+  command -v opencode >/dev/null 2>&1; _check "opencode" $? "agents cannot launch without it"
+  command -v setsid   >/dev/null 2>&1; _check "setsid"   $? "optional — used for session isolation"
+  if command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1; then
+    ok "python ($( (command -v python3 || command -v python) ))"
+  else
+    warn "python3 — required only for the TUI (the loop works without it)"; rc=1
+  fi
+  if _venv_exists; then
+    if "$(_venv_python)" -c 'import textual' >/dev/null 2>&1; then
+      ok "TUI venv ready (textual installed)"
+    else
+      warn "venv exists but textual missing — run './run prep'"
+    fi
+  else
+    info "TUI venv not created yet — './run prep' (or './run tui') will build it"
+  fi
+  [ -f "$HARNESS_DIR/specs/PRODUCT.md" ] && ok "specs/PRODUCT.md present" \
+    || warn "specs/PRODUCT.md missing — the loop refuses to start (run /bootstrap)"
+  [ "$rc" = 0 ] && ok "ready" || warn "some checks need attention (above)"
+  return "$rc"
+}
+
+usage() {
+  cat >&2 <<EOF
+${C_B}Ralph Harness — ./run${C_R}   single entrypoint (run from .harness/)
+
+  ${C_B}./run tui${C_R}          prep the venv if needed, then open the Textual TUI
+  ${C_B}./run daemon${C_R}       run the loop headless, waiting for new work
+  ${C_B}./run once${C_R}         run exactly one cycle
+  ${C_B}./run loop${C_R} [flags] run the loop until idle (--once --daemon --no-intake --reset)
+  ${C_B}./run stop${C_R}         stop the running runtime
+  ${C_B}./run status${C_R}       print health / cycle / loop
+  ${C_B}./run dashboard${C_R}    regenerate the static HTML dashboard
+  ${C_B}./run desk${C_R} [msg]   drop work into the inbox (interactive, or one-shot with a message)
+  ${C_B}./run prep${C_R}         create/refresh the TUI virtualenv only
+  ${C_B}./run doctor${C_R}       check prerequisites (git, jq, python, opencode, venv)
+  ${C_B}./run help${C_R}         this message
+
+Flags/dashes are tolerated (tui = -tui = --tui). The loop needs only bash + git +
+jq + opencode; the venv (.harness/.venv) is used solely by the TUI.
+EOF
+}
+
+# ---- dispatch (tolerant of leading dashes and the names you might reach for) --
+mode="${1:-help}"; [ "$#" -gt 0 ] && shift
+mode="${mode#-}"; mode="${mode#-}"
+case "$mode" in
+  tui|ui)                       cmd_tui "$@" ;;
+  prep|setup|tui-prep|install)  cmd_prep ;;
+  loop|loop-only)               cmd_loop "$@" ;;
+  daemon)                       cmd_daemon "$@" ;;
+  once)                         cmd_once "$@" ;;
+  stop|kill)                    cmd_stop ;;
+  status|st)                    cmd_status ;;
+  dashboard|dash|html)          cmd_dashboard "$@" ;;
+  desk|inbox)                   cmd_desk "$@" ;;
+  doctor|check)                 cmd_doctor ;;
+  help|h|"")                    usage ;;
+  *) warn "unknown command: $mode"; usage; exit 2 ;;
+esac

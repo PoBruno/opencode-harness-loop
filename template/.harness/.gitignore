@@ -1,0 +1,12 @@
+# Machine-local, ephemeral artefacts — never versioned.
+
+# The TUI virtualenv (built by `./run tui`/`./run prep`; rebuilt on any host).
+.venv/
+
+# Python bytecode cache from the TUI.
+__pycache__/
+*.pyc
+
+# Runtime bookkeeping the engine rewrites every cycle is ignored at the project
+# root (state/ events/ logs/ presentation/html/index.html); long-term memory/ IS
+# versioned. See INSTALL.md Phase 6.

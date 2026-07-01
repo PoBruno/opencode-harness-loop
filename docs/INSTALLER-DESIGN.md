@@ -96,7 +96,7 @@ opencode-harness-loop/               (the repository on GitHub)
 └── template/                        # everything that goes to the target project
     ├── opencode.json                #   FIXED — base config (merged on install)
     ├── .opencode/                   #   FIXED — the 6 agents + commands
-    │   ├── agent/                   #     desk, groom, plan, build, review, distill
+    │   ├── agent/                   #     desk, groom, planner, build, review, distill
     │   └── command/                 #     bootstrap, status, consistency
     ├── .harness/                    #   FIXED — the whole runtime
     │   ├── loop.sh  dashboard.sh

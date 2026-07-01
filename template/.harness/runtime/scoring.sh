@@ -4,7 +4,7 @@
 #   WSJF = Cost of Delay / Job Duration
 #   Cost of Delay = business_value + time_criticality + risk_reduction   (weighted)
 #
-# The four inputs are ESTIMATED by the groom/plan agents against concrete signals
+# The four inputs are ESTIMATED by the groom/planner agents against concrete signals
 # (module priority in PRODUCT.md, dependency out-degree, prod-bug vs long-term
 # vision, gap-analysis size). This script only applies the arithmetic and the
 # weights, which live once in .harness/specs/DECISION_POLICY.md — so priority is

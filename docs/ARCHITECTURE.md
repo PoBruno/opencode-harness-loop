@@ -16,9 +16,10 @@
 > `.harness/inbox/inbox.md`, `PARKED.md` → `.harness/PARKED.md`, `events/` →
 > `.harness/events/`, `state/` → `.harness/state/`. The engine scripts live in
 > `.harness/runtime/` and the TUI in `.harness/presentation/textual/`. The six
-> agents (`desk, groom, plan, build, review, distill`) are `.opencode/agent/*.md`;
+> agents (`desk, groom, planner, build, review, distill`) are `.opencode/agent/*.md`;
 > skills under `.harness/skills/` are registered via `opencode.json`.
-> `.harness/loop.sh` and `.harness/dashboard.sh` are friendly wrappers.
+> `.harness/run` is the single entrypoint; `.harness/loop.sh` and
+> `.harness/dashboard.sh` are the internal wrappers it drives.
 
 ---
 
@@ -103,10 +104,11 @@ project/                            (realized under .harness/ — see the note a
 ├── AGENTS.md                       # constitution: deterministic stack, subagent policy, ownership
 ├── README.md                       # bootstrap prompt
 │
-├── .opencode/agent/                # desk, groom, plan, build, review, distill
+├── .opencode/agent/                # desk, groom, planner, build, review, distill
 │
 ├── .harness/                       # THE ENGINE
-│   ├── loop.sh                     #   Main Loop entrypoint
+│   ├── run                         #   single entrypoint (tui · loop · desk · dashboard · doctor)
+│   ├── loop.sh                     #   Main Loop entrypoint (driven by run)
 │   ├── dashboard.sh                #   TUI/HTML entrypoint (auto-detects)
 │   └── runtime/
 │       ├── scheduler.sh  cycle.sh  intake_loop.sh
@@ -401,9 +403,9 @@ maintenance — with one adjustment to the phase decision:
 ```
 decide_phase():
   if INBOX has a new item                     -> groom
-  else if SPRINT has an escalated ([!]) task   -> plan   (re-decide it)
+  else if SPRINT has an escalated ([!]) task   -> planner (re-decide it)
   else if SPRINT has an open ([ ]) task         -> build
-  else if ROADMAP has a pending item           -> plan
+  else if ROADMAP has a pending item           -> planner
   else                                         -> done
   # SPRINT tasks in [p] (parked) or [!] (escalated) are invisible to open/done,
   # so a stuck task never blocks the ones behind it.

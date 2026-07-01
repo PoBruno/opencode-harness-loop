@@ -49,7 +49,7 @@ count_sprint_open()     { _count '^[[:space:]]*-[[:space:]]+\[[[:space:]]\]' "$S
 count_sprint_done()     { _count '^[[:space:]]*-[[:space:]]+\[[xX]\]' "$SPRINT_FILE"; }
 # Two extra sprint states beyond open/done, both invisible to open/done counts:
 #   [p] parked    — waiting on a missing external resource (runtime-marked)
-#   [!] escalated — repeatedly failed; routed back to plan for a fresh decision
+#   [!] escalated — repeatedly failed; routed back to planner for a fresh decision
 count_sprint_parked()    { _count '^[[:space:]]*-[[:space:]]+\[[pP]\]' "$SPRINT_FILE"; }
 count_sprint_escalated() { _count '^[[:space:]]*-[[:space:]]+\[!\]' "$SPRINT_FILE"; }
 
@@ -213,7 +213,7 @@ drop_first_escalated_task() {
     "$SPRINT_FILE" >"$SPRINT_FILE.tmp" && mv "$SPRINT_FILE.tmp" "$SPRINT_FILE"
 }
 
-# Auto-reject the first pending roadmap item (bounded runtime fallback when plan
+# Auto-reject the first pending roadmap item (bounded runtime fallback when planner
 # cannot decompose it after repeated stalls).
 reject_first_roadmap_pending() {
   [[ -f "$ROADMAP_FILE" ]] || return 0
